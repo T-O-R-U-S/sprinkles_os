@@ -1,10 +1,19 @@
-use core::{ops::{Add, AddAssign}, u8};
+use core::{ops::{AddAssign}, fmt::{self, Display, Write, Pointer, Arguments}};
 
+use lazy_static::lazy_static;
 use volatile::Volatile;
+use spin::Mutex;
 
 const BUFFER_WIDTH: usize = 80;
 const BUFFER_HEIGHT: usize = 25;
 
+lazy_static! {
+    pub static ref WRITER: Mutex<Writer> = Mutex::new(Writer {
+        column_position: ScreenPosition(0),
+        row_position: ScreenPosition(0),
+        buffer: unsafe { &mut *(0xb8000 as *mut Buffer) },
+    });
+}
 
 #[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -33,7 +42,7 @@ pub enum Colour {
 pub struct ColourCode(pub u8);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct ColourText<'a>(u8, &'a str);
+pub struct ColourText<'a>(pub u8, pub &'a str);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(C)]
@@ -75,7 +84,7 @@ pub struct Writer {
 }
 
 impl ColourCode {
-    fn new(foreground: Colour, background: Colour) -> ColourCode {
+    pub fn new(foreground: Colour, background: Colour) -> ColourCode {
         ColourCode((background as u8) << 4 | (foreground as u8))
     }
 }
@@ -87,6 +96,14 @@ impl<'a> ColourText<'a> {
 
     pub fn text(text: &'a str) -> Self {
         ColourText(0x0f, text)
+    }
+}
+
+impl<'a> Display for ColourText<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // TODO: Impl safe formatting for ColourText
+        
+        f.write_str(self.1)
     }
 }
 
@@ -120,6 +137,7 @@ impl Writer {
     pub fn write_colourful(&mut self, s: ColourText) {
         for byte in s.1.bytes() {
             match byte {
+                // Printable ASCII range
                 0x20..=0x7e | b'\n' => self.write_byte(s.0, byte),
                 _ => self.write_byte(s.0, 0xfe)
             }
@@ -132,5 +150,73 @@ impl Writer {
 
     pub fn new_line(&mut self) {
         self.row_position += 1;
+        self.column_position = ScreenPosition(0);
+
+        self.clear_row(self.row_position.0);
+    }
+
+    pub fn clear_row(&mut self, row: usize) {
+        let blank = ScreenChar {
+            ascii_character: b' ',
+            colour_code: 0x00
+        };
+
+        for col in 0..BUFFER_WIDTH {
+            self.buffer.chars[row][col].write(blank)
+        }
+    }
+}
+
+impl fmt::Write for Writer {
+    fn write_str(&mut self, s: &str) -> fmt::Result {
+        let mut colour = ColourCode(0x0f);
+
+        let mut s = s.bytes();
+
+        while let Some(byte) = s.next() {
+            match byte {
+                0x1b => match s.next() {
+                    Some(colour_code) => colour = ColourCode(colour_code),
+                    None => return Err(fmt::Error)
+                }
+                _ => self.write_byte(colour.0, byte)
+            }
+        }
+        Ok(())
+    }
+}
+
+#[macro_export]
+macro_rules! print {
+    ($($arg:tt)*) => ($crate::vga_buffer::_print(format_args!($($arg)*)));
+}
+
+#[macro_export]
+macro_rules! println {
+    () => ($crate::print!("\n"));
+    ($($arg:tt)*) => ($crate::print!("{}\n", format_args!($($arg)*)));
+}
+
+#[doc(hidden)]
+pub fn _print(args: fmt::Arguments) {
+    writer::try_lock().unwrap().write_fmt(args).unwrap();
+}
+
+pub mod writer {
+    use spin::MutexGuard;
+    use super::Writer;
+    use super::WRITER;
+    
+    pub fn lock<'a>() -> MutexGuard<'a, Writer> {
+        WRITER.lock()
+    }
+
+    pub fn try_lock<'a>() -> Option<MutexGuard<'a, Writer>> {
+        WRITER.try_lock()
+    }
+
+    pub unsafe fn force_lock<'a>() -> MutexGuard<'a, Writer> {
+        WRITER.force_unlock();
+        WRITER.lock()
     }
 }

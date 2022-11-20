@@ -3,25 +3,25 @@
 #![no_main]
 
 mod vga_buffer;
-
-
 use core::panic::PanicInfo;
 
-use vga_buffer::{Writer, ColourText};
+use vga_buffer::{ColourText, ColourCode};
+
+use crate::vga_buffer::Colour;
 
 #[panic_handler]
 fn panic(_info: &PanicInfo) -> ! {
     loop {}
 }
 
-
-static HELLO: &[u8] = b"Hello world!";
-
 #[no_mangle]
 pub extern "C" fn _start() -> ! {
-    let mut writer = Writer::default();
+    println!(r#"
+SprinklesOS
+Author: [{}]
+"#,
+ColourText::colour(ColourCode::new(Colour::White, Colour::Pink), "T-O-R-U-S")
+);
 
-    writer.write_string("Ain't no sunshine");
-    
     loop {}
 }
