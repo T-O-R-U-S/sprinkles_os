@@ -4,6 +4,6 @@
 
 ### TODOs:
 
-- Hand-writtnen Bootloader
 - Text editor
 - Executor
+- Colour output
