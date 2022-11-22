@@ -1,5 +1,6 @@
 use core::{task::{Poll, Context}, pin::Pin};
 
+use alloc::boxed::Box;
 use conquer_once::spin::OnceCell;
 use crossbeam::queue::ArrayQueue;
 use futures_util::Stream;
@@ -59,10 +60,9 @@ pub(crate) fn add_scancode(scancode: u8) {
 }
 
 use futures_util::stream::StreamExt;
-use pc_keyboard::{layouts, DecodedKey, HandleControl, Keyboard, ScancodeSet1};
-use crate::print;
+use pc_keyboard::{layouts, DecodedKey, HandleControl, Keyboard, ScancodeSet1, KeyCode};
 
-pub async fn print_keypresses() {
+pub async fn print_keypresses(unicode_char_handler: Box<dyn Fn(char)>, raw_key_handler: Box<dyn Fn(KeyCode)>) {
     let mut scancodes = ScancodeStream::new();
     let mut keyboard = Keyboard::new(layouts::Us104Key, ScancodeSet1,
         HandleControl::Ignore);
@@ -71,8 +71,8 @@ pub async fn print_keypresses() {
         if let Ok(Some(key_event)) = keyboard.add_byte(scancode) {
             if let Some(key) = keyboard.process_keyevent(key_event) {
                 match key {
-                    DecodedKey::Unicode(character) => print!("{}", character),
-                    DecodedKey::RawKey(key) => print!("{:?}", key),
+                    DecodedKey::Unicode(character) => unicode_char_handler(character),
+                    DecodedKey::RawKey(key) => raw_key_handler(key),
                 }
             }
         }

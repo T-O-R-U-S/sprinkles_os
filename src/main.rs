@@ -21,11 +21,13 @@ mod allocator;
 mod runtime;
 mod task;
 
-use core::fmt::Write;
+use core::fmt::{Write, Debug, Display};
 use core::panic::PanicInfo;
 
+use alloc::boxed::Box;
 use bootloader::{entry_point, BootInfo};
-use runtime::{SimpleExecutor, Task};
+use pc_keyboard::KeyCode;
+use runtime::{executor::Executor, Task};
 use vga_buffer::{writer, ColourCode, ColourText};
 
 use vga_buffer::{Colour};
@@ -59,16 +61,18 @@ fn boot_init(boot_info: &'static BootInfo) -> ! {
         init::init(boot_info)
     };
 
-    let mut executor = SimpleExecutor::new();
+    let mut executor = Executor::new();
     executor.spawn(Task::new(main(mapper, frame_allocator)));
-    executor.spawn(Task::new(keyboard::print_keypresses()));
+    executor.spawn(Task::new(keyboard::print_keypresses(Box::new(print_key), Box::new(print_code))));
     executor.run();
+}
 
-    println!("Done...");
+pub fn print_key(key: char) {
+    print!("{key}");
+}
 
-    loop {
-        x86_64::instructions::hlt();
-    }
+pub fn print_code(key: KeyCode) {
+    print!("{key:#?}")
 }
 
 /// Main runtime
