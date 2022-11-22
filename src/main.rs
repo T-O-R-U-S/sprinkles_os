@@ -2,28 +2,33 @@
     lang_items,
     custom_test_frameworks,
     abi_x86_interrupt,
-    panic_info_message
+    panic_info_message,
+    alloc_error_handler
 )]
+
 #![no_std]
 #![no_main]
 #![allow(dead_code)]
+
+extern crate alloc;
 
 mod gdt;
 mod init;
 mod interrupts;
 mod memory;
 mod vga_buffer;
+mod allocator;
 
 use core::fmt::Write;
 use core::panic::PanicInfo;
 
+use alloc::boxed::Box;
+use alloc::string::String;
 use bootloader::{entry_point, BootInfo};
-use vga_buffer::{writer, ColourCode};
+use vga_buffer::{writer, ColourCode, ColourText};
 
-use x86_64::structures::paging::PageTable;
-use x86_64::VirtAddr;
-
-use vga_buffer::{Colour, ColourText};
+use vga_buffer::{Colour};
+use x86_64::structures::paging::{OffsetPageTable, FrameAllocator, Size4KiB};
 
 #[panic_handler]
 fn panic(info: &PanicInfo) -> ! {
@@ -35,7 +40,7 @@ fn panic(info: &PanicInfo) -> ! {
 
     display.clear_all();
 
-    write!(display, "{info:#?}").unwrap();
+    write!(display, "{info:#}").unwrap();
 
     loop {
         x86_64::instructions::hlt();
@@ -47,36 +52,12 @@ entry_point!(boot_init);
 /// Initializes the kernel
 #[no_mangle]
 fn boot_init(boot_info: &'static BootInfo) -> ! {
-    init::init();
 
-    use x86_64::registers::control::Cr3;
-
-    let phys_mem_offset = VirtAddr::new(boot_info.physical_memory_offset);
-    let l4_table = unsafe {
-        use memory::active_level_4_table;
-        active_level_4_table(phys_mem_offset)
+    let (frame_allocator, mapper) = unsafe {
+        init::init(boot_info)
     };
 
-    for (i, entry) in l4_table.iter().enumerate() {
-        if !entry.is_unused() {
-            println!("L4 Entry {}: {:?}", i, entry);
-
-            // get the physical address from the entry and convert it
-            let phys = entry.frame().unwrap().start_address();
-            let virt = phys.as_u64() + boot_info.physical_memory_offset;
-            let ptr = VirtAddr::new(virt).as_mut_ptr();
-            let l3_table: &PageTable = unsafe { &*ptr };
-
-            // print non-empty entries of the level 3 table
-            for (i, entry) in l3_table.iter().enumerate() {
-                if !entry.is_unused() {
-                    println!("  L3 Entry {}: {:?}", i, entry);
-                }
-            }
-        }
-    }
-
-    main();
+    main(mapper, frame_allocator);
 
     loop {
         x86_64::instructions::hlt();
@@ -84,4 +65,7 @@ fn boot_init(boot_info: &'static BootInfo) -> ! {
 }
 
 /// Main runtime
-pub fn main() {}
+pub fn main(mut mapper: OffsetPageTable, mut frame_allocator: impl FrameAllocator<Size4KiB>) {
+    println!("{}", ColourText::colour(ColourCode(0x3f), "SprinklesOS"));
+    println!("Authored by: {}", ColourText::colour(ColourCode(0xdf), "[T-O-R-U-S]"))
+}

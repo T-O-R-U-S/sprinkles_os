@@ -3,6 +3,7 @@ use core::{
     ops::AddAssign,
 };
 
+use alloc::{string::{String, ToString}, format, vec::Vec};
 use lazy_static::lazy_static;
 use spin::{Mutex, MutexGuard};
 use volatile::Volatile;
@@ -46,8 +47,8 @@ pub enum Colour {
 #[repr(transparent)]
 pub struct ColourCode(pub u8);
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct ColourText<'a>(pub u8, pub &'a str);
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ColourText(pub u8, pub String);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(C)]
@@ -102,6 +103,16 @@ impl ColourCode {
     }
 }
 
+impl Into<[u8; 2]> for ColourCode {
+    fn into(self) -> [u8; 2] {
+        if self.0 > 0x7f {
+            [0x7f, (self.0 - 0x7f)]
+        } else {
+            [self.0, 0]
+        }
+    }
+}
+
 impl Into<u8> for ColourCode {
     fn into(self) -> u8 {
         self.0
@@ -114,19 +125,37 @@ impl Into<ColourCode> for u8 {
     }
 }
 
-impl<'a> ColourText<'a> {
-    pub fn colour(colour_code: ColourCode, text: &'a str) -> Self {
-        ColourText(colour_code.0, text)
+impl ColourText {
+    pub fn colour(colour_code: ColourCode, text: &str) -> Self {
+        ColourText(colour_code.0, text.into())
     }
 
-    pub fn text(text: &'a str) -> Self {
-        ColourText(0x0f, text)
+    pub fn text(text: String) -> Self {
+        ColourText(0x0f, text.into())
     }
 }
 
-impl<'a> From<&'a str> for ColourText<'a> {
-    fn from(string: &'a str) -> ColourText<'a> {
-        ColourText(0x0f, string)
+impl Display for ColourText {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+
+        let mut out = Vec::from([0x00]);
+        let colour_escape: [u8; 2] = ColourCode(self.0).into();
+
+        out.extend(colour_escape);
+        out.extend(self.1.bytes());
+        out.extend([0x00, 0x00, 0x00]);
+
+        let out: String = String::from_utf8_lossy(&out).to_string();
+
+        f.write_str(&out)?;
+
+        Ok(())
+    }
+}
+
+impl From<&str> for ColourText {
+    fn from(value: &str) -> Self {
+        ColourText(0x0f, value.into())
     }
 }
 
@@ -152,13 +181,25 @@ impl<const X: usize, const Y: usize> Writer<X, Y> {
     }
 
     pub fn write_colourful(&mut self, s: ColourText) {
-        for byte in s.1.bytes() {
+        let prev = self.colour;
+        let mut bytes = s.1.bytes();
+
+        self.colour = s.0.into();
+
+        while let Some(byte) = bytes.next()  {
             match byte {
+                0x00 => match [bytes.next(), bytes.next()] {
+                    [Some(byte_1), Some(byte_2)] => self.colour = ColourCode(byte_1 + byte_2),
+                    [Some(byte_1), None] => self.write_byte(self.colour, byte_1),
+                    _ => self.write_byte(self.colour, 0x00)
+                }
                 // Printable ASCII range
-                0x20..=0x7e | b'\n' => self.write_byte(s.0.into(), byte),
-                _ => self.write_byte(s.0.into(), 0xfe),
+                0x20..=0x7e | b'\n' => self.write_byte(self.colour, byte),
+                _ => self.write_byte(self.colour, 0xfe),
             }
         }
+
+        self.colour = prev;
     }
 
     pub fn write_string(&mut self, s: &str) {
@@ -201,9 +242,7 @@ impl<const X: usize, const Y: usize> Writer<X, Y> {
 
 impl<const X: usize, const Y: usize> fmt::Write for Writer<X, Y> {
     fn write_str(&mut self, s: &str) -> fmt::Result {
-        let colour = self.colour;
-
-        self.write_colourful(ColourText::colour(colour, s));
+        self.write_colourful(ColourText::colour(self.colour, s));
 
         Ok(())
     }
@@ -230,36 +269,12 @@ pub fn _print(args: fmt::Arguments) {
     });
 }
 
-pub trait WriterDisplay<const X: usize, const Y: usize> {
-    fn write(self, writer: MutexGuard<Writer<X, Y>>);
-}
-
-impl<const X: usize, const Y: usize> WriterDisplay<X, Y> for ColourText<'_> {
-    fn write(self, mut writer: MutexGuard<Writer<X, Y>>) {
-        writer.write_colourful(self)
-    }
-}
-
-impl<const X: usize, const Y: usize, T: Display> WriterDisplay<X, Y> for T {
-    fn write(self, mut writer: MutexGuard<Writer<X, Y>>) {
-        write!(writer, "{self}")
-            .expect("WriterDisplay::print's auto impl for Display types failed");
-    }
-}
-
 pub mod writer {
     use super::ColourCode;
     use super::Writer;
-    use super::WriterDisplay;
     use super::WRITER;
     use super::{BUFFER_HEIGHT, BUFFER_WIDTH};
     use spin::MutexGuard;
-
-    pub fn print(text: impl WriterDisplay<BUFFER_WIDTH, BUFFER_HEIGHT>) {
-        let writer = WRITER.lock();
-
-        text.write(writer);
-    }
 
     pub fn lock<'a>() -> MutexGuard<'a, Writer<BUFFER_WIDTH, BUFFER_HEIGHT>> {
         WRITER.lock()
