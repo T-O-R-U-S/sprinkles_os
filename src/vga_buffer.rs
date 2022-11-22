@@ -3,9 +3,9 @@ use core::{
     ops::AddAssign,
 };
 
-use alloc::{string::{String, ToString}, format, vec::Vec};
+use alloc::{string::{String, ToString}, vec::Vec, borrow::ToOwned};
 use lazy_static::lazy_static;
-use spin::{Mutex, MutexGuard};
+use spin::{Mutex};
 use volatile::Volatile;
 use x86_64::instructions::interrupts;
 
@@ -219,6 +219,17 @@ impl<const X: usize, const Y: usize> Writer<X, Y> {
     pub fn new_line(&mut self) {
         self.row_position += 1;
         self.column_position = ScreenPosition(0);
+
+        if self.row_position == ScreenPosition(0) {
+            let mut buf_chars = Vec::new();
+            self.buffer.chars[1..].clone_into(&mut buf_chars);
+
+            for (idx, row) in self.buffer.chars[..BUFFER_HEIGHT-1].iter_mut().enumerate() {
+                *row = buf_chars[idx].clone();
+            }
+
+            self.row_position = ScreenPosition(BUFFER_HEIGHT-1);
+        }
 
         self.clear_row(self.row_position.0, self.blank());
     }

@@ -21,7 +21,7 @@ mod allocator;
 mod runtime;
 mod task;
 
-use core::fmt::{Write, Debug, Display};
+use core::fmt::{Write};
 use core::panic::PanicInfo;
 
 use alloc::boxed::Box;
@@ -31,7 +31,6 @@ use runtime::{executor::Executor, Task};
 use vga_buffer::{writer, ColourCode, ColourText};
 
 use vga_buffer::{Colour};
-use x86_64::structures::paging::{OffsetPageTable, FrameAllocator, Size4KiB};
 
 use crate::task::keyboard;
 
@@ -57,12 +56,10 @@ entry_point!(boot_init);
 /// Initializes the kernel
 #[no_mangle]
 fn boot_init(boot_info: &'static BootInfo) -> ! {
-    let (frame_allocator, mapper) = unsafe {
-        init::init(boot_info)
-    };
+    unsafe { init::init(boot_info) };
 
     let mut executor = Executor::new();
-    executor.spawn(Task::new(main(mapper, frame_allocator)));
+    executor.spawn(Task::new(main()));
     executor.spawn(Task::new(keyboard::print_keypresses(Box::new(print_key), Box::new(print_code))));
     executor.run();
 }
@@ -76,7 +73,12 @@ pub fn print_code(key: KeyCode) {
 }
 
 /// Main runtime
-pub async fn main(mut mapper: OffsetPageTable<'static>, mut frame_allocator: impl FrameAllocator<Size4KiB>) {
+pub async fn main() {
     println!("{}", ColourText::colour(ColourCode(0x3f), "SprinklesOS"));
-    println!("Authored by: {}", ColourText::colour(ColourCode(0xdf), "[T-O-R-U-S]"))
+    println!("Authored by: {}", ColourText::colour(ColourCode(0xdf), "[T-O-R-U-S]"));
+
+    loop {
+        println!("Print. :)");
+        x86_64::instructions::hlt();
+    }
 }
