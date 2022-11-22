@@ -17,7 +17,8 @@ lazy_static! {
         column_position: ScreenPosition(0),
         row_position: ScreenPosition(0),
         buffer: unsafe { &mut *(0xb8000 as *mut Buffer) },
-        colour: ColourCode::default()
+        colour_code: ColourCode::default(),
+        lock_colour: false
     });
 }
 
@@ -70,7 +71,8 @@ pub struct Writer<const X: usize, const Y: usize> {
     column_position: ScreenPosition<X>,
     row_position: ScreenPosition<Y>,
     buffer: &'static mut Buffer,
-    pub colour: ColourCode,
+    pub colour_code: ColourCode,
+    pub lock_colour: bool
 }
 
 impl Default for ColourCode {
@@ -85,7 +87,8 @@ impl<const X: usize, const Y: usize> Default for Writer<X, Y> {
             column_position: Default::default(),
             row_position: Default::default(),
             buffer: unsafe { &mut *(0xb8000 as *mut Buffer) },
-            colour: Default::default(),
+            colour_code: Default::default(),
+            lock_colour: true,
         }
     }
 }
@@ -181,25 +184,32 @@ impl<const X: usize, const Y: usize> Writer<X, Y> {
     }
 
     pub fn write_colourful(&mut self, s: ColourText) {
-        let prev = self.colour;
+        let prev = self.colour_code;
         let mut bytes = s.1.bytes();
 
-        self.colour = s.0.into();
+        if !self.lock_colour {
+            self.colour_code = s.0.into()
+        }
+
 
         while let Some(byte) = bytes.next()  {
             match byte {
-                0x00 => match [bytes.next(), bytes.next()] {
-                    [Some(byte_1), Some(byte_2)] => self.colour = ColourCode(byte_1 + byte_2),
-                    [Some(byte_1), None] => self.write_byte(self.colour, byte_1),
-                    _ => self.write_byte(self.colour, 0x00)
+                0x00=> match [bytes.next(), bytes.next()] {
+                    [Some(byte_1), Some(byte_2)] => {
+                        if !self.lock_colour { self.colour_code = ColourCode(byte_1 + byte_2) }
+                    },
+                    [Some(byte_1), None] => if !self.lock_colour {
+                        self.write_byte(self.colour_code, byte_1)
+                    },
+                    _ => self.write_byte(self.colour_code, 0x00)
                 }
                 // Printable ASCII range
-                0x20..=0x7e | b'\n' => self.write_byte(self.colour, byte),
-                _ => self.write_byte(self.colour, 0xfe),
+                0x20..=0x7e | b'\n' => self.write_byte(self.colour_code, byte),
+                _ => self.write_byte(self.colour_code, 0xfe),
             }
         }
 
-        self.colour = prev;
+        self.colour_code = prev;
     }
 
     pub fn write_string(&mut self, s: &str) {
@@ -235,14 +245,14 @@ impl<const X: usize, const Y: usize> Writer<X, Y> {
     pub fn blank(&self) -> ScreenChar {
         ScreenChar {
             ascii_character: b' ',
-            colour_code: self.colour.into(),
+            colour_code: self.colour_code.into(),
         }
     }
 }
 
 impl<const X: usize, const Y: usize> fmt::Write for Writer<X, Y> {
     fn write_str(&mut self, s: &str) -> fmt::Result {
-        self.write_colourful(ColourText::colour(self.colour, s));
+        self.write_colourful(ColourText::colour(self.colour_code, s));
 
         Ok(())
     }
@@ -262,8 +272,7 @@ macro_rules! println {
 #[doc(hidden)]
 pub fn _print(args: fmt::Arguments) {
     interrupts::without_interrupts(|| {
-        writer::try_lock()
-            .expect("Tried to acquire lock on stdout, failed.")
+        writer::lock()
             .write_fmt(args)
             .unwrap()
     });
@@ -285,8 +294,22 @@ pub mod writer {
             return Err("Failed to lock writer to set colour.")
         };
 
-        writer.colour = colour;
+        if !writer.lock_colour {
+            return Err("Writer colour is locked");
+        }
+
+        writer.colour_code = colour;
         Ok(())
+    }
+
+    pub fn lock_colour(set_to: bool) -> Result<(), ()> {
+        match WRITER.try_lock() {
+            Some(mut writer) => {
+                writer.lock_colour = set_to;
+                Ok(())
+            },
+            None => return Err(())
+        }
     }
 
     pub fn try_lock<'a>() -> Option<MutexGuard<'a, Writer<BUFFER_WIDTH, BUFFER_HEIGHT>>> {

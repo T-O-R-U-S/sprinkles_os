@@ -18,17 +18,20 @@ mod interrupts;
 mod memory;
 mod vga_buffer;
 mod allocator;
+mod runtime;
+mod task;
 
 use core::fmt::Write;
 use core::panic::PanicInfo;
 
-use alloc::boxed::Box;
-use alloc::string::String;
 use bootloader::{entry_point, BootInfo};
+use runtime::{SimpleExecutor, Task};
 use vga_buffer::{writer, ColourCode, ColourText};
 
 use vga_buffer::{Colour};
 use x86_64::structures::paging::{OffsetPageTable, FrameAllocator, Size4KiB};
+
+use crate::task::keyboard;
 
 #[panic_handler]
 fn panic(info: &PanicInfo) -> ! {
@@ -36,11 +39,11 @@ fn panic(info: &PanicInfo) -> ! {
 
     let error_colour = ColourCode::new(Colour::White, Colour::Red);
 
-    display.colour = error_colour;
+    display.colour_code = error_colour;
 
     display.clear_all();
 
-    write!(display, "{info:#}").unwrap();
+    write!(display, "Kernel panic: {info:#}").expect("Panicked when displaying error message. You're all alone.");
 
     loop {
         x86_64::instructions::hlt();
@@ -52,12 +55,16 @@ entry_point!(boot_init);
 /// Initializes the kernel
 #[no_mangle]
 fn boot_init(boot_info: &'static BootInfo) -> ! {
-
     let (frame_allocator, mapper) = unsafe {
         init::init(boot_info)
     };
 
-    main(mapper, frame_allocator);
+    let mut executor = SimpleExecutor::new();
+    executor.spawn(Task::new(main(mapper, frame_allocator)));
+    executor.spawn(Task::new(keyboard::print_keypresses()));
+    executor.run();
+
+    println!("Done...");
 
     loop {
         x86_64::instructions::hlt();
@@ -65,7 +72,7 @@ fn boot_init(boot_info: &'static BootInfo) -> ! {
 }
 
 /// Main runtime
-pub fn main(mut mapper: OffsetPageTable, mut frame_allocator: impl FrameAllocator<Size4KiB>) {
+pub async fn main(mut mapper: OffsetPageTable<'static>, mut frame_allocator: impl FrameAllocator<Size4KiB>) {
     println!("{}", ColourText::colour(ColourCode(0x3f), "SprinklesOS"));
     println!("Authored by: {}", ColourText::colour(ColourCode(0xdf), "[T-O-R-U-S]"))
 }
