@@ -1,4 +1,4 @@
-# FiddleOS
+# SprinklesOS
 
 ## A hobby sideproject
 
