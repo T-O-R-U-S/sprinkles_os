@@ -3,9 +3,13 @@ use core::{
     ops::AddAssign,
 };
 
-use alloc::{string::{String, ToString}, vec::Vec, borrow::ToOwned};
+use alloc::{
+    borrow::ToOwned,
+    string::{String, ToString},
+    vec::Vec,
+};
 use lazy_static::lazy_static;
-use spin::{Mutex};
+use spin::Mutex;
 use volatile::Volatile;
 use x86_64::instructions::interrupts;
 
@@ -65,14 +69,14 @@ struct Buffer {
 
 #[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(transparent)]
-pub struct ScreenPosition<const MAX: usize>(usize);
+pub struct ScreenPosition<const MAX: usize>(pub usize);
 
 pub struct Writer<const X: usize, const Y: usize> {
     column_position: ScreenPosition<X>,
     row_position: ScreenPosition<Y>,
     buffer: &'static mut Buffer,
     pub colour_code: ColourCode,
-    pub lock_colour: bool
+    pub lock_colour: bool,
 }
 
 impl Default for ColourCode {
@@ -140,7 +144,6 @@ impl ColourText {
 
 impl Display for ColourText {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-
         let mut out = Vec::from([0x00]);
         let colour_escape: [u8; 2] = ColourCode(self.0).into();
 
@@ -191,18 +194,21 @@ impl<const X: usize, const Y: usize> Writer<X, Y> {
             self.colour_code = s.0.into()
         }
 
-
-        while let Some(byte) = bytes.next()  {
+        while let Some(byte) = bytes.next() {
             match byte {
-                0x00=> match [bytes.next(), bytes.next()] {
+                0x00 => match [bytes.next(), bytes.next()] {
                     [Some(byte_1), Some(byte_2)] => {
-                        if !self.lock_colour { self.colour_code = ColourCode(byte_1 + byte_2) }
-                    },
-                    [Some(byte_1), None] => if !self.lock_colour {
-                        self.write_byte(self.colour_code, byte_1)
-                    },
-                    _ => self.write_byte(self.colour_code, 0x00)
-                }
+                        if !self.lock_colour {
+                            self.colour_code = ColourCode(byte_1 + byte_2)
+                        }
+                    }
+                    [Some(byte_1), None] => {
+                        if !self.lock_colour {
+                            self.write_byte(self.colour_code, byte_1)
+                        }
+                    }
+                    _ => self.write_byte(self.colour_code, 0x00),
+                },
                 // Printable ASCII range
                 0x20..=0x7e | b'\n' => self.write_byte(self.colour_code, byte),
                 _ => self.write_byte(self.colour_code, 0xfe),
@@ -216,6 +222,29 @@ impl<const X: usize, const Y: usize> Writer<X, Y> {
         self.write_colourful(s.into())
     }
 
+    pub fn draw_rect(
+        &mut self,
+        x: ScreenPosition<X>,
+        y: ScreenPosition<Y>,
+        width: ScreenPosition<X>,
+        height: ScreenPosition<Y>,
+        character: u8,
+    ) {
+        let x = x.0;
+        let y = y.0;
+        let height = height.0;
+        let width = width.0;
+
+        for row in self.buffer.chars[y..y + height].iter_mut() {
+            for col in row[x..x + width].iter_mut() {
+                col.write(ScreenChar {
+                    ascii_character: character,
+                    colour_code: self.colour_code.into(),
+                })
+            }
+        }
+    }
+
     pub fn new_line(&mut self) {
         self.row_position += 1;
         self.column_position = ScreenPosition(0);
@@ -224,11 +253,14 @@ impl<const X: usize, const Y: usize> Writer<X, Y> {
             let mut buf_chars = Vec::new();
             self.buffer.chars[1..].clone_into(&mut buf_chars);
 
-            for (idx, row) in self.buffer.chars[..BUFFER_HEIGHT-1].iter_mut().enumerate() {
+            for (idx, row) in self.buffer.chars[..BUFFER_HEIGHT - 1]
+                .iter_mut()
+                .enumerate()
+            {
                 *row = buf_chars[idx].clone();
             }
 
-            self.row_position = ScreenPosition(BUFFER_HEIGHT-1);
+            self.row_position = ScreenPosition(BUFFER_HEIGHT - 1);
         }
 
         self.clear_row(self.row_position.0, self.blank());
@@ -282,11 +314,7 @@ macro_rules! println {
 
 #[doc(hidden)]
 pub fn _print(args: fmt::Arguments) {
-    interrupts::without_interrupts(|| {
-        writer::lock()
-            .write_fmt(args)
-            .unwrap()
-    });
+    interrupts::without_interrupts(|| writer::lock().write_fmt(args).unwrap());
 }
 
 pub mod writer {
@@ -318,8 +346,8 @@ pub mod writer {
             Some(mut writer) => {
                 writer.lock_colour = set_to;
                 Ok(())
-            },
-            None => return Err(())
+            }
+            None => return Err(()),
         }
     }
 

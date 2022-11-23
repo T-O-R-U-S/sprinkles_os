@@ -1,4 +1,7 @@
-use core::{task::{Poll, Context}, pin::Pin};
+use core::{
+    pin::Pin,
+    task::{Context, Poll},
+};
 
 use alloc::boxed::Box;
 use conquer_once::spin::OnceCell;
@@ -9,7 +12,10 @@ static SCANCODE_QUEUE: OnceCell<ArrayQueue<u8>> = OnceCell::uninit();
 
 use futures_util::task::AtomicWaker;
 
-use crate::{println, vga_buffer::{ColourText, ColourCode, Colour}};
+use crate::{
+    println,
+    vga_buffer::{Colour, ColourCode, ColourText},
+};
 
 static WAKER: AtomicWaker = AtomicWaker::new();
 
@@ -19,7 +25,8 @@ pub struct ScancodeStream {
 
 impl ScancodeStream {
     pub fn new() -> Self {
-        SCANCODE_QUEUE.try_init_once(|| ArrayQueue::new(100))
+        SCANCODE_QUEUE
+            .try_init_once(|| ArrayQueue::new(100))
             .expect("ScancodeStream::new should only be called once");
         ScancodeStream { _private: () }
     }
@@ -29,7 +36,9 @@ impl Stream for ScancodeStream {
     type Item = u8;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        let queue = SCANCODE_QUEUE.try_get().expect("Keyboard input queue not initialized");
+        let queue = SCANCODE_QUEUE
+            .try_get()
+            .expect("Keyboard input queue not initialized");
         if let Some(scancode) = queue.pop() {
             return Poll::Ready(Some(scancode));
         }
@@ -40,7 +49,7 @@ impl Stream for ScancodeStream {
                 WAKER.take();
                 Poll::Ready(Some(scancode))
             }
-            None => Poll::Pending
+            None => Poll::Pending,
         }
     }
 }
@@ -48,24 +57,24 @@ impl Stream for ScancodeStream {
 pub(crate) fn add_scancode(scancode: u8) {
     let warn = ColourText::colour(ColourCode::new(Colour::Black, Colour::Yellow), "WARNING:");
 
-    if let Ok(queue) = SCANCODE_QUEUE.try_get() {
-        if let Err(_) = queue.push(scancode) {
-            println!("{warn}: scancode queue full; dropping keyboard input");
-        } else {
-            WAKER.wake()
-        }
+    let queue = SCANCODE_QUEUE.try_get().expect("Input queue uninitialized");
+
+    if let Err(_) = queue.push(scancode) {
+        println!("{warn}: scancode queue full; dropping keyboard input");
     } else {
-        println!("{warn}: scancode queue uninitialized");
+        WAKER.wake()
     }
 }
 
 use futures_util::stream::StreamExt;
-use pc_keyboard::{layouts, DecodedKey, HandleControl, Keyboard, ScancodeSet1, KeyCode};
+use pc_keyboard::{layouts, DecodedKey, HandleControl, KeyCode, Keyboard, ScancodeSet1};
 
-pub async fn print_keypresses(unicode_char_handler: Box<dyn Fn(char)>, raw_key_handler: Box<dyn Fn(KeyCode)>) {
+pub async fn print_keypresses(
+    unicode_char_handler: Box<dyn Fn(char)>,
+    raw_key_handler: Box<dyn Fn(KeyCode)>,
+) {
     let mut scancodes = ScancodeStream::new();
-    let mut keyboard = Keyboard::new(layouts::Us104Key, ScancodeSet1,
-        HandleControl::Ignore);
+    let mut keyboard = Keyboard::new(layouts::Us104Key, ScancodeSet1, HandleControl::Ignore);
 
     while let Some(scancode) = scancodes.next().await {
         if let Ok(Some(key_event)) = keyboard.add_byte(scancode) {

@@ -5,23 +5,22 @@
     panic_info_message,
     alloc_error_handler
 )]
-
 #![no_std]
 #![no_main]
 #![allow(dead_code)]
 
 extern crate alloc;
 
+mod allocator;
 mod gdt;
 mod init;
 mod interrupts;
 mod memory;
-mod vga_buffer;
-mod allocator;
 mod runtime;
 mod task;
+mod vga_buffer;
 
-use core::fmt::{Write};
+use core::fmt::Write;
 use core::panic::PanicInfo;
 
 use alloc::boxed::Box;
@@ -30,9 +29,10 @@ use pc_keyboard::KeyCode;
 use runtime::{executor::Executor, Task};
 use vga_buffer::{writer, ColourCode, ColourText};
 
-use vga_buffer::{Colour};
+use vga_buffer::Colour;
 
 use crate::task::keyboard;
+use crate::vga_buffer::ScreenPosition;
 
 #[panic_handler]
 fn panic(info: &PanicInfo) -> ! {
@@ -44,7 +44,8 @@ fn panic(info: &PanicInfo) -> ! {
 
     display.clear_all();
 
-    write!(display, "Kernel panic: {info:#}").expect("Panicked when displaying error message. You're all alone.");
+    write!(display, "Kernel panic: {info:#}")
+        .expect("Panicked when displaying error message. You're all alone.");
 
     loop {
         x86_64::instructions::hlt();
@@ -60,7 +61,10 @@ fn boot_init(boot_info: &'static BootInfo) -> ! {
 
     let mut executor = Executor::new();
     executor.spawn(Task::new(main()));
-    executor.spawn(Task::new(keyboard::print_keypresses(Box::new(print_key), Box::new(print_code))));
+    executor.spawn(Task::new(keyboard::print_keypresses(
+        Box::new(print_key),
+        Box::new(print_code),
+    )));
     executor.run();
 }
 
@@ -75,10 +79,18 @@ pub fn print_code(key: KeyCode) {
 /// Main runtime
 pub async fn main() {
     println!("{}", ColourText::colour(ColourCode(0x3f), "SprinklesOS"));
-    println!("Authored by: {}", ColourText::colour(ColourCode(0xdf), "[T-O-R-U-S]"));
+    println!(
+        "Authored by: {}",
+        ColourText::colour(ColourCode(0xdf), "[T-O-R-U-S]")
+    );
 
-    loop {
-        println!("Print. :)");
-        x86_64::instructions::hlt();
-    }
+    let mut writer = writer::lock();
+
+    writer.draw_rect(
+        ScreenPosition(40),
+        ScreenPosition(13),
+        ScreenPosition(8),
+        ScreenPosition(5),
+        b'\x04',
+    )
 }
