@@ -20,7 +20,7 @@ lazy_static! {
     pub static ref WRITER: Mutex<Writer<BUFFER_WIDTH, BUFFER_HEIGHT>> = Mutex::new(Writer {
         column_position: ScreenPosition(0),
         row_position: ScreenPosition(0),
-        buffer: unsafe { &mut *(0xb8000 as *mut Buffer) },
+        buffer: unsafe { &mut *(0xb8000 as *mut Buffer<BUFFER_WIDTH, BUFFER_HEIGHT>) },
         colour_code: ColourCode::default(),
         lock_colour: false
     });
@@ -63,8 +63,8 @@ pub struct ScreenChar {
 }
 
 #[repr(transparent)]
-struct Buffer {
-    chars: [[Volatile<ScreenChar>; BUFFER_WIDTH]; BUFFER_HEIGHT],
+struct Buffer<const X: usize, const Y: usize> {
+    chars: [[Volatile<ScreenChar>; X]; Y],
 }
 
 #[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
@@ -74,7 +74,7 @@ pub struct ScreenPosition<const MAX: usize>(pub usize);
 pub struct Writer<const X: usize, const Y: usize> {
     column_position: ScreenPosition<X>,
     row_position: ScreenPosition<Y>,
-    buffer: &'static mut Buffer,
+    buffer: &'static mut Buffer<X, Y>,
     pub colour_code: ColourCode,
     pub lock_colour: bool,
 }
@@ -85,15 +85,30 @@ impl Default for ColourCode {
     }
 }
 
+impl Default for ScreenChar {
+    fn default() -> Self {
+        Self {
+            ascii_character: Default::default(),
+            colour_code: Default::default(),
+        }
+    }
+}
+
 impl<const X: usize, const Y: usize> Default for Writer<X, Y> {
     fn default() -> Self {
         Self {
             column_position: Default::default(),
             row_position: Default::default(),
-            buffer: unsafe { &mut *(0xb8000 as *mut Buffer) },
+            buffer: unsafe { &mut *(0xb8000 as *mut Buffer<X, Y>) },
             colour_code: Default::default(),
             lock_colour: true,
         }
+    }
+}
+
+impl<const MAX: usize> Into<usize> for ScreenPosition<MAX> {
+    fn into(self) -> usize {
+        self.0
     }
 }
 
@@ -220,6 +235,29 @@ impl<const X: usize, const Y: usize> Writer<X, Y> {
 
     pub fn write_string(&mut self, s: &str) {
         self.write_colourful(s.into())
+    }
+
+    pub fn within_rect<const RECT_X: usize, const RECT_Y: usize>(
+        &mut self,
+        x: ScreenPosition<X>,
+        y: ScreenPosition<Y>,
+        width: ScreenPosition<RECT_X>,
+        height: ScreenPosition<RECT_Y>,
+    ) -> [[&mut Volatile<ScreenChar>; RECT_X]; RECT_Y] {
+        let (y, height): (usize, usize) = (y.into(), height.into());
+        let (x, width): (usize, usize) = (x.into(), width.into());
+
+        let mut buf_ref: Vec<Vec<&mut Volatile<ScreenChar>>> = vec![];
+
+        for row in self.buffer.chars[y..y + height].iter_mut() {
+            let mut ref_row: Vec<&mut Volatile<ScreenChar>> = Vec::with_capacity(width);
+            for col in row[x..x + width].iter_mut() {
+                ref_row.push(col);
+            }
+            buf_ref.push(ref_row)
+        }
+
+        buf_ref.try_into().expect("Failed to acquire rect")
     }
 
     pub fn draw_rect(

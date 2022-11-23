@@ -9,6 +9,7 @@
 #![no_main]
 #![allow(dead_code)]
 
+#[macro_use(vec)]
 extern crate alloc;
 
 mod allocator;
