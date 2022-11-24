@@ -1,4 +1,5 @@
-use bootloader::BootInfo;
+use bootloader_api::BootInfo;
+use bootloader_api::info::Optional;
 use x86_64::structures::paging::OffsetPageTable;
 use x86_64::VirtAddr;
 
@@ -16,10 +17,14 @@ pub unsafe fn init(
     unsafe { interrupts::PICS.lock().initialize() };
     x86_64::instructions::interrupts::enable();
 
-    let physical_memory_offset = VirtAddr::new(boot_info.physical_memory_offset);
+    let Optional::Some(mem_offset) = boot_info.physical_memory_offset else {
+        panic!("Memory offset was not set properly");
+    };
+
+    let physical_memory_offset = VirtAddr::new(mem_offset);
 
     let (mut frame_allocator, mut mapper) = (
-        SprinkleFrameAllocator::init(&boot_info.memory_map),
+        SprinkleFrameAllocator::init(&boot_info),
         memory::page_table_init(physical_memory_offset),
     );
 

@@ -2,21 +2,32 @@
 name = "sprinkles_os"
 version = "0.1.0"
 edition = "2021"
+build = "build.rs"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
-[dependencies]
-bootloader = { version = "0.9.8", features = ["map_physical_memory"] }
+
+[build-dependencies]
+kernel = { path = "./kernel", artifact = "bin", target = "x86_64-unknown-none" }
+bootloader = { version="0.10.13", target="x86_64-unknown-none", artifact = "bin" }
+
+[workspace]
+members = ["kernel"]
+
+[workspace.dependencies]
 volatile = "0.2.7"
 lazy_static = { version="1.0", features=["spin_no_std"]  }
 spin = "0.9.4"
 x86_64 = "0.14.10"
 pic8259 = "0.10.2"
 pc-keyboard = "0.5.1"
-linked_list_allocator = "0.9.1"
+linked_list_allocator = "0.10.4"
 crossbeam = { version = "0.8.2", default-features = false, features = ["alloc"] }
-conquer-once = { version="0.2.0", default-features = false }
+conquer-once = { version="0.3.2", default-features = false }
 futures-util = { version="0.3.4", default-features = false, features = ["alloc"] }
+bootloader_api = "0.11.0-beta"
+
+
 
 [profile.dev]
 panic = "abort"

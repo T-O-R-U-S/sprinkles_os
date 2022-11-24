@@ -1,28 +1,32 @@
+use bootloader_api::info::MemoryRegionKind;
+use bootloader_api::info::MemoryRegions;
 use x86_64::PhysAddr;
 use x86_64::structures::paging::{OffsetPageTable, PhysFrame, FrameAllocator, Size4KiB};
 use x86_64::{structures::paging::PageTable, VirtAddr};
 
-use bootloader::bootinfo::{MemoryMap, MemoryRegionType};
+
+
+use bootloader_api::BootInfo;
 
 pub struct SprinkleFrameAllocator {
-    memory_map: &'static MemoryMap,
+    memory_map: &'static MemoryRegions,
     next: usize
 }
 
 impl SprinkleFrameAllocator {
-    pub unsafe fn init(memory_map: &'static MemoryMap) -> Self {
+    pub unsafe fn init(boot_info: &'static BootInfo) -> Self {
         SprinkleFrameAllocator {
-            memory_map,
+            memory_map: &boot_info.memory_regions,
             next: 0
         }
     }
 
     fn usable_frames(&self) -> impl Iterator<Item = PhysFrame> {
         let regions = self.memory_map.iter();
-        let usable_regions = regions.filter(|r| r.region_type == MemoryRegionType::Usable);
+        let usable_regions = regions.filter(|r| r.kind == MemoryRegionKind::Usable);
 
         let addr_ranges = usable_regions
-            .map(|r| r.range.start_addr()..r.range.end_addr());
+            .map(|r| r.start..r.end);
         
         let frame_addresses = addr_ranges.flat_map(|r| r.step_by(4096));
 
