@@ -63,7 +63,7 @@ pub struct ScreenChar {
 }
 
 #[repr(transparent)]
-struct Buffer<const X: usize, const Y: usize> {
+pub struct Buffer<const X: usize, const Y: usize> {
     chars: [[Volatile<ScreenChar>; X]; Y],
 }
 
@@ -72,9 +72,9 @@ struct Buffer<const X: usize, const Y: usize> {
 pub struct ScreenPosition<const MAX: usize>(pub usize);
 
 pub struct Writer<const X: usize, const Y: usize> {
-    column_position: ScreenPosition<X>,
-    row_position: ScreenPosition<Y>,
-    buffer: &'static mut Buffer<X, Y>,
+    pub column_position: ScreenPosition<X>,
+    pub row_position: ScreenPosition<Y>,
+    pub buffer: &'static mut Buffer<X, Y>,
     pub colour_code: ColourCode,
     pub lock_colour: bool,
 }
@@ -235,29 +235,6 @@ impl<const X: usize, const Y: usize> Writer<X, Y> {
 
     pub fn write_string(&mut self, s: &str) {
         self.write_colourful(s.into())
-    }
-
-    pub fn within_rect<const RECT_X: usize, const RECT_Y: usize>(
-        &mut self,
-        x: ScreenPosition<X>,
-        y: ScreenPosition<Y>,
-        width: ScreenPosition<RECT_X>,
-        height: ScreenPosition<RECT_Y>,
-    ) -> [[&mut Volatile<ScreenChar>; RECT_X]; RECT_Y] {
-        let (y, height): (usize, usize) = (y.into(), height.into());
-        let (x, width): (usize, usize) = (x.into(), width.into());
-
-        let mut buf_ref: Vec<Vec<&mut Volatile<ScreenChar>>> = vec![];
-
-        for row in self.buffer.chars[y..y + height].iter_mut() {
-            let mut ref_row: Vec<&mut Volatile<ScreenChar>> = Vec::with_capacity(width);
-            for col in row[x..x + width].iter_mut() {
-                ref_row.push(col);
-            }
-            buf_ref.push(ref_row)
-        }
-
-        buf_ref.try_into().expect("Failed to acquire rect")
     }
 
     pub fn draw_rect(

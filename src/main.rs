@@ -9,7 +9,6 @@
 #![no_main]
 #![allow(dead_code)]
 
-#[macro_use(vec)]
 extern crate alloc;
 
 mod allocator;
@@ -74,7 +73,7 @@ pub fn print_key(key: char) {
 }
 
 pub fn print_code(key: KeyCode) {
-    print!("{key:#?}")
+    print!("{key:#?}");
 }
 
 /// Main runtime
@@ -84,14 +83,4 @@ pub async fn main() {
         "Authored by: {}",
         ColourText::colour(ColourCode(0xdf), "[T-O-R-U-S]")
     );
-
-    let mut writer = writer::lock();
-
-    writer.draw_rect(
-        ScreenPosition(40),
-        ScreenPosition(13),
-        ScreenPosition(8),
-        ScreenPosition(5),
-        b'\x04',
-    )
 }
