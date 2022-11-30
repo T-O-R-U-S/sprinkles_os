@@ -3,12 +3,14 @@
     custom_test_frameworks,
     abi_x86_interrupt,
     panic_info_message,
-    alloc_error_handler
+    alloc_error_handler,
+    associated_type_bounds,
 )]
 #![no_std]
 #![no_main]
 #![allow(dead_code)]
 
+#[macro_use(vec)]
 extern crate alloc;
 
 mod allocator;
@@ -32,7 +34,6 @@ use vga_buffer::{writer, ColourCode, ColourText};
 use vga_buffer::Colour;
 
 use crate::task::keyboard;
-use crate::vga_buffer::ScreenPosition;
 
 #[panic_handler]
 fn panic(info: &PanicInfo) -> ! {
@@ -60,11 +61,12 @@ fn boot_init(boot_info: &'static BootInfo) -> ! {
     unsafe { init::init(boot_info) };
 
     let mut executor = Executor::new();
-    executor.spawn(Task::new(main()));
     executor.spawn(Task::new(keyboard::print_keypresses(
         Box::new(print_key),
         Box::new(print_code),
     )));
+
+    executor.spawn(Task::new(main()));
     executor.run();
 }
 
@@ -78,9 +80,13 @@ pub fn print_code(key: KeyCode) {
 
 /// Main runtime
 pub async fn main() {
-    println!("{}", ColourText::colour(ColourCode(0x3f), "SprinklesOS"));
-    println!(
+    let mut screen = writer::lock();
+    
+    writeln!(screen, "{}", ColourText::colour(ColourCode(0x3f), "SprinklesOS"));
+    writeln!(screen, 
         "Authored by: {}",
         ColourText::colour(ColourCode(0xdf), "[T-O-R-U-S]")
     );
+
+    let mut sub_screen = screen.within_rect::<30, 20>(5, 5);
 }
