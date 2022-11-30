@@ -1,5 +1,5 @@
 use core::{
-    fmt::{self, Display, Write},
+    fmt::{self, Display},
     ops::AddAssign, borrow::BorrowMut, array,
 };
 
@@ -10,7 +10,6 @@ use alloc::{
 use lazy_static::lazy_static;
 use spin::Mutex;
 use volatile::Volatile;
-use x86_64::instructions::interrupts;
 
 /// The width of the VGA buffer
 const BUFFER_WIDTH: usize = 80;

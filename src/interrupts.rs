@@ -1,5 +1,6 @@
 use crate::gdt;
-use crate::println;
+use core::fmt::Write;
+use crate::vga_buffer::writer;
 
 use x86_64::instructions::port::Port;
 use x86_64::structures::idt::PageFaultErrorCode;
@@ -73,7 +74,10 @@ extern "x86-interrupt" fn timer_interrupt_handler(_stack_frame: InterruptStackFr
 }
 
 extern "x86-interrupt" fn breakpoint_handler(stack_frame: InterruptStackFrame) {
-    println!("EXCEPTION BREAKPOINT:\n{stack_frame:#?}");
+    let Some(mut screen) = writer::try_lock() else {
+        return;
+    };
+    writeln!(screen, "EXCEPTION BREAKPOINT:\n{stack_frame:#?}").ok();
 }
 
 extern "x86-interrupt" fn double_fault_handler(stack_frame: InterruptStackFrame, errno: u64) -> ! {

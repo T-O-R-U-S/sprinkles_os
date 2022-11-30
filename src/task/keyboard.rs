@@ -2,6 +2,7 @@ use core::{
     pin::Pin,
     task::{Context, Poll},
 };
+use core::fmt::Write;
 
 use alloc::boxed::Box;
 use conquer_once::spin::OnceCell;
@@ -13,8 +14,7 @@ static SCANCODE_QUEUE: OnceCell<ArrayQueue<u8>> = OnceCell::uninit();
 use futures_util::task::AtomicWaker;
 
 use crate::{
-    println,
-    vga_buffer::{Colour, ColourCode, ColourText},
+    vga_buffer::{Colour, ColourCode, ColourText, writer},
 };
 
 static WAKER: AtomicWaker = AtomicWaker::new();
@@ -60,7 +60,11 @@ pub(crate) fn add_scancode(scancode: u8) {
     let queue = SCANCODE_QUEUE.try_get().expect("Input queue uninitialized");
 
     if let Err(_) = queue.push(scancode) {
-        println!("{warn}: scancode queue full; dropping keyboard input");
+        let Some(mut screen) = writer::try_lock() else {
+            return;
+        };
+
+        writeln!(screen, "{warn}: scancode queue full; dropping keyboard input").ok();
     } else {
         WAKER.wake()
     }

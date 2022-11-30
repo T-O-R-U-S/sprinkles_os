@@ -71,22 +71,28 @@ fn boot_init(boot_info: &'static BootInfo) -> ! {
 }
 
 pub fn print_key(key: char) {
-    print!("{key}");
+    let Some(mut screen) = writer::try_lock() else {
+        return;
+    };
+
+    write!(screen, "{key:#?}").ok();
 }
 
 pub fn print_code(key: KeyCode) {
-    print!("{key:#?}");
+    let Some(mut screen) = writer::try_lock() else {
+        return;
+    };
+
+    write!(screen, "{key:#?}").ok();
 }
 
 /// Main runtime
 pub async fn main() {
     let mut screen = writer::lock();
     
-    writeln!(screen, "{}", ColourText::colour(ColourCode(0x3f), "SprinklesOS"));
+    writeln!(screen, "{}", ColourText::colour(ColourCode(0x3f), "SprinklesOS")).ok();
     writeln!(screen, 
         "Authored by: {}",
         ColourText::colour(ColourCode(0xdf), "[T-O-R-U-S]")
-    );
-
-    let mut sub_screen = screen.within_rect::<30, 20>(5, 5);
+    ).ok();
 }
