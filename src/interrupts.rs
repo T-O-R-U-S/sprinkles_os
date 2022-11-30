@@ -74,10 +74,7 @@ extern "x86-interrupt" fn timer_interrupt_handler(_stack_frame: InterruptStackFr
 }
 
 extern "x86-interrupt" fn breakpoint_handler(stack_frame: InterruptStackFrame) {
-    let Some(mut screen) = writer::try_lock() else {
-        return;
-    };
-    writeln!(screen, "EXCEPTION BREAKPOINT:\n{stack_frame:#?}").ok();
+    writeln!(writer::maybe(), "EXCEPTION BREAKPOINT:\n{stack_frame:#?}").ok();
 }
 
 extern "x86-interrupt" fn double_fault_handler(stack_frame: InterruptStackFrame, errno: u64) -> ! {

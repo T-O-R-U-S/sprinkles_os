@@ -71,19 +71,11 @@ fn boot_init(boot_info: &'static BootInfo) -> ! {
 }
 
 pub fn print_key(key: char) {
-    let Some(mut screen) = writer::try_lock() else {
-        return;
-    };
-
-    write!(screen, "{key:#?}").ok();
+    write!(writer::maybe(), "{key}").ok();
 }
 
 pub fn print_code(key: KeyCode) {
-    let Some(mut screen) = writer::try_lock() else {
-        return;
-    };
-
-    write!(screen, "{key:#?}").ok();
+    write!(writer::maybe(), "{key:#?}").ok();
 }
 
 /// Main runtime

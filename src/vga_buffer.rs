@@ -1,5 +1,5 @@
 use core::{
-    fmt::{self, Display},
+    fmt::{self, Display, Write},
     ops::AddAssign, borrow::BorrowMut, array,
 };
 
@@ -8,7 +8,7 @@ use alloc::{
     vec::{Vec},
 };
 use lazy_static::lazy_static;
-use spin::Mutex;
+use spin::{Mutex, MutexGuard};
 use volatile::Volatile;
 
 /// The width of the VGA buffer
@@ -469,11 +469,24 @@ impl<const X: usize, const Y: usize, Buf: BufWrite> fmt::Write for Writer<X, Y, 
     }
 }
 
+pub struct PotentialWriter<'a, T: Write>(Option<MutexGuard<'a, T>>);
+
+impl<T: Write> fmt::Write for PotentialWriter<'_, T> {
+    fn write_str(&mut self, s: &str) -> fmt::Result {
+        if let Some(writer) = &mut self.0 {
+            writer.write_str(s)
+        } else {
+            return Err(fmt::Error);
+        }
+    }
+}
+
 pub mod writer {
     type ScreenWriter = Writer<BUFFER_WIDTH, BUFFER_HEIGHT, &'static mut Buffer<BUFFER_WIDTH, BUFFER_HEIGHT, Volatile<ScreenChar>>>;
 
     use super::Buffer;
     use super::ColourCode;
+    use super::PotentialWriter;
     use super::ScreenChar;
     use super::Writer;
     use super::WRITER;
@@ -509,6 +522,17 @@ pub mod writer {
             }
             None => return Err(()),
         }
+    }
+
+    /// Returns a PotentialWriter (a new-type wrapper around Writer) that implements
+    /// fmt::Write. If the PotentialWriter is none, then it won't write to the VGA
+    /// output buffer.
+    pub fn maybe<'a>() -> PotentialWriter<'a, ScreenWriter> {
+        let Some(writer) = WRITER.try_lock() else {
+            return PotentialWriter(None);
+        };
+
+        return PotentialWriter(Some(writer));
     }
 
     /// Attempts to lock the writer. Preferable to a writer::lock because it
