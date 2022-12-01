@@ -2,14 +2,16 @@
 
 ## A hobby operating system
 
-#### Pre-requisites:
+### Pre-requisites
+
 - Cargo
 - Qemu (optional, for testing)
 
-# Running:
+### Running
+
 All you have to do is clone this repo, install Qemu, and `cargo run` to boot into Sprinkles.
 
-### TODOs:
+### TODOs
 
 - A Nice TUI
 - Text editor

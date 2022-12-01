@@ -199,6 +199,7 @@ impl<const X: usize, const Y: usize, T: BorrowMut<Volatile<ScreenChar>>> BufWrit
     }
 }
 
+/// A struct that allows you to write to a buffer; the core of the rendering for VGA text mode
 #[derive(Clone, Copy, Debug)]
 pub struct Writer<const X: usize, const Y: usize, Buf: BufWrite> {
     /// The column position in the VGA text buffer
@@ -481,7 +482,7 @@ impl<T: Write> fmt::Write for PotentialWriter<'_, T> {
     }
 }
 
-pub mod writer {
+pub mod global_writer {
     type ScreenWriter = Writer<BUFFER_WIDTH, BUFFER_HEIGHT, &'static mut Buffer<BUFFER_WIDTH, BUFFER_HEIGHT, Volatile<ScreenChar>>>;
 
     use super::Buffer;

@@ -20,26 +20,27 @@ mod interrupts;
 mod memory;
 mod runtime;
 mod task;
-mod vga_buffer;
+pub mod vga_buffer;
+pub mod fs;
 
 use core::fmt::Write;
 use core::panic::PanicInfo;
 
 use alloc::boxed::Box;
 use bootloader::{entry_point, BootInfo};
-use pc_keyboard::KeyCode;
+use pc_keyboard::{DecodedKey};
 use runtime::{executor::Executor, Task};
-use vga_buffer::{writer, ColourCode, ColourText};
+use vga_buffer::{global_writer, ColourCode, ColourText};
 
-use vga_buffer::Colour;
+use vga_buffer::Colour::*;
 
 use crate::task::keyboard;
 
 #[panic_handler]
 fn panic(info: &PanicInfo) -> ! {
-    let mut display = unsafe { writer::force_lock() };
+    let mut display = unsafe { global_writer::force_lock() };
 
-    let error_colour = ColourCode::new(Colour::White, Colour::Red);
+    let error_colour = ColourCode::new(White, Red);
 
     display.colour_code = error_colour;
 
@@ -56,35 +57,34 @@ fn panic(info: &PanicInfo) -> ! {
 entry_point!(boot_init);
 
 /// Initializes the kernel
-#[no_mangle]
 fn boot_init(boot_info: &'static BootInfo) -> ! {
     unsafe { init::init(boot_info) };
 
     let mut executor = Executor::new();
-    executor.spawn(Task::new(keyboard::print_keypresses(
+    executor.spawn(Task::new(keyboard::handle_keypresses(
         Box::new(print_key),
-        Box::new(print_code),
     )));
 
     executor.spawn(Task::new(main()));
     executor.run();
 }
 
-pub fn print_key(key: char) {
-    write!(writer::maybe(), "{key}").ok();
-}
-
-pub fn print_code(key: KeyCode) {
-    write!(writer::maybe(), "{key:#?}").ok();
+// Placeholder functions to print each pressed key until a true handling system can be implemented
+pub fn print_key(key: DecodedKey) {
+    match key {
+        DecodedKey::RawKey(raw) => write!(global_writer::maybe(), "{raw:?}").ok(),
+        DecodedKey::Unicode(character) => write!(global_writer::maybe(), "{character}").ok(),
+    };
 }
 
 /// Main runtime
 pub async fn main() {
-    let mut screen = writer::lock();
-    
+    let mut screen = global_writer::lock();
+
     writeln!(screen, "{}", ColourText::colour(ColourCode(0x3f), "SprinklesOS")).ok();
     writeln!(screen, 
         "Authored by: {}",
         ColourText::colour(ColourCode(0xdf), "[T-O-R-U-S]")
     ).ok();
 }
+

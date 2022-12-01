@@ -43,7 +43,7 @@ pub unsafe fn page_table_init(physical_memory_offset: VirtAddr) -> OffsetPageTab
     OffsetPageTable::new(level_4_table, physical_memory_offset)
 }
 
-/// Do not call this function more than once (to avoid aliasing the mutable reference)
+// NOTE: Do not call this function more than once (to avoid aliasing the mutable reference)
 unsafe fn active_level_4_table(physical_memory_offset: VirtAddr) -> &'static mut PageTable {
     use x86_64::registers::control::Cr3;
 

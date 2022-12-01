@@ -4,7 +4,6 @@ use core::{
 };
 use core::fmt::Write;
 
-use alloc::boxed::Box;
 use conquer_once::spin::OnceCell;
 use crossbeam::queue::ArrayQueue;
 use futures_util::Stream;
@@ -14,7 +13,7 @@ static SCANCODE_QUEUE: OnceCell<ArrayQueue<u8>> = OnceCell::uninit();
 use futures_util::task::AtomicWaker;
 
 use crate::{
-    vga_buffer::{Colour, ColourCode, ColourText, writer},
+    vga_buffer::{Colour, ColourCode, ColourText, global_writer},
 };
 
 static WAKER: AtomicWaker = AtomicWaker::new();
@@ -60,11 +59,7 @@ pub(crate) fn add_scancode(scancode: u8) {
     let queue = SCANCODE_QUEUE.try_get().expect("Input queue uninitialized");
 
     if let Err(_) = queue.push(scancode) {
-        let Some(mut screen) = writer::try_lock() else {
-            return;
-        };
-
-        writeln!(screen, "{warn}: scancode queue full; dropping keyboard input").ok();
+        writeln!(global_writer::maybe(), "{warn}: scancode queue full; dropping keyboard input").ok();
     } else {
         WAKER.wake()
     }
@@ -73,9 +68,8 @@ pub(crate) fn add_scancode(scancode: u8) {
 use futures_util::stream::StreamExt;
 use pc_keyboard::{layouts, DecodedKey, HandleControl, KeyCode, Keyboard, ScancodeSet1};
 
-pub async fn print_keypresses(
-    unicode_char_handler: Box<dyn Fn(char)>,
-    raw_key_handler: Box<dyn Fn(KeyCode)>,
+pub async fn handle_keypresses(
+    press_handler: impl Fn(DecodedKey),
 ) {
     let mut scancodes = ScancodeStream::new();
     let mut keyboard = Keyboard::new(layouts::Us104Key, ScancodeSet1, HandleControl::Ignore);
@@ -83,10 +77,7 @@ pub async fn print_keypresses(
     while let Some(scancode) = scancodes.next().await {
         if let Ok(Some(key_event)) = keyboard.add_byte(scancode) {
             if let Some(key) = keyboard.process_keyevent(key_event) {
-                match key {
-                    DecodedKey::Unicode(character) => unicode_char_handler(character),
-                    DecodedKey::RawKey(key) => raw_key_handler(key),
-                }
+                press_handler(key)
             }
         }
     }

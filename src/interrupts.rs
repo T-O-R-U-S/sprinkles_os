@@ -1,6 +1,6 @@
 use crate::gdt;
 use core::fmt::Write;
-use crate::vga_buffer::writer;
+use crate::vga_buffer::global_writer;
 
 use x86_64::instructions::port::Port;
 use x86_64::structures::idt::PageFaultErrorCode;
@@ -74,7 +74,7 @@ extern "x86-interrupt" fn timer_interrupt_handler(_stack_frame: InterruptStackFr
 }
 
 extern "x86-interrupt" fn breakpoint_handler(stack_frame: InterruptStackFrame) {
-    writeln!(writer::maybe(), "EXCEPTION BREAKPOINT:\n{stack_frame:#?}").ok();
+    writeln!(global_writer::maybe(), "EXCEPTION BREAKPOINT:\n{stack_frame:#?}").ok();
 }
 
 extern "x86-interrupt" fn double_fault_handler(stack_frame: InterruptStackFrame, errno: u64) -> ! {
