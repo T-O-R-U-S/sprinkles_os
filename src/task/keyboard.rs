@@ -13,7 +13,7 @@ static SCANCODE_QUEUE: OnceCell<ArrayQueue<u8>> = OnceCell::uninit();
 use futures_util::task::AtomicWaker;
 
 use crate::{
-    vga_buffer::{Colour, ColourCode, ColourText, global_writer},
+    vga_buffer::{global_writer},
 };
 
 static WAKER: AtomicWaker = AtomicWaker::new();
@@ -54,7 +54,7 @@ impl Stream for ScancodeStream {
 }
 
 pub(crate) fn add_scancode(scancode: u8) {
-    let warn = ColourText::colour(ColourCode::new(Colour::Black, Colour::Yellow), "WARNING:");
+    let warn = "WARNING:";
 
     let queue = SCANCODE_QUEUE.try_get().expect("Input queue uninitialized");
 
@@ -66,7 +66,7 @@ pub(crate) fn add_scancode(scancode: u8) {
 }
 
 use futures_util::stream::StreamExt;
-use pc_keyboard::{layouts, DecodedKey, HandleControl, KeyCode, Keyboard, ScancodeSet1};
+use pc_keyboard::{layouts, DecodedKey, HandleControl, Keyboard, ScancodeSet1};
 
 pub async fn handle_keypresses(
     press_handler: impl Fn(DecodedKey),

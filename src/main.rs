@@ -5,6 +5,7 @@
     panic_info_message,
     alloc_error_handler,
     associated_type_bounds,
+    let_chains
 )]
 #![no_std]
 #![no_main]
@@ -30,7 +31,7 @@ use alloc::boxed::Box;
 use bootloader::{entry_point, BootInfo};
 use pc_keyboard::{DecodedKey};
 use runtime::{executor::Executor, Task};
-use vga_buffer::{global_writer, ColourCode, ColourText};
+use vga_buffer::{global_writer, ColourCode};
 
 use vga_buffer::Colour::*;
 
@@ -46,8 +47,9 @@ fn panic(info: &PanicInfo) -> ! {
 
     display.clear_all();
 
-    write!(display, "Kernel panic: {info:#}")
-        .expect("Panicked when displaying error message. You're all alone.");
+    write!(display, "DBG: {info:#?}
+Kernel panic: {info}
+").expect("Panicked, then panicked again displaying error message. You're on your own! Good luck!");
 
     loop {
         x86_64::instructions::hlt();
@@ -79,12 +81,8 @@ pub fn print_key(key: DecodedKey) {
 
 /// Main runtime
 pub async fn main() {
-    let mut screen = global_writer::lock();
+    let mut writer = global_writer::lock();
 
-    writeln!(screen, "{}", ColourText::colour(ColourCode(0x3f), "SprinklesOS")).ok();
-    writeln!(screen, 
-        "Authored by: {}",
-        ColourText::colour(ColourCode(0xdf), "[T-O-R-U-S]")
-    ).ok();
+    
 }
 
